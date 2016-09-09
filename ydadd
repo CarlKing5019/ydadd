@@ -1,0 +1,166 @@
+#!/usr/bin/env python
+#encoding=utf-8
+
+import os
+import sys
+import codecs
+import re
+import urllib
+import subprocess
+
+import httplib2
+#httplib2.debuglevel = 1
+
+h = httplib2.Http()
+user_agent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.4 (KHTML, like Gecko) Chrome/22.0.1229.94 Safari/537.4"
+
+
+def youdao_traslate(word_input):
+    '''
+    mobile:
+       English:http://dict.youdao.com/m/search?keyfrom=dict.mindex&vendor=&q=mouse
+       Chinese:http://dict.youdao.com/m/search?keyfrom=dict.mindex&vendor=&q=%E7%BF%BB%E8%AF%91
+   '''
+    def is_not_found(html):
+        not_found = '没有找到'
+        if html.find(not_found) != -1:
+            return True
+        return False
+
+    word = urllib.quote(word_input)
+    url = 'http://dict.youdao.com/m/search?keyfrom=dict.mindex&vendor=&q=' + word
+    #print url
+    #pc:http://dict.youdao.com/search?keyfrom=webwordbook&q=mouse
+    pc_url = 'http://dict.youdao.com/search?keyfrom=webwordbook&q=' + word
+
+    resp, content = h.request(url)
+    pat_content = re.compile(
+        r'''
+        <div><span><b>.*?</b></span>(.*?)
+        <div\ class="content">(.*?)</div>
+        ''', re.S | re.X
+    )
+    result = pat_content.findall(content)
+    if not result:
+        if is_not_found(content):
+            msg = '''抱歉，没有找到与您查询的"%s"相符的字词.\ntry: %s''' % (word_input, pc_url)
+        else:
+            msg = '''Can not find result, check the regex!\nsee: %s ''' % url
+        raise Exception(msg)
+    else:
+        result = result[0]
+
+    # 1 find soundmark    一些单词，如娱乐，没有音标
+    soundmark = result[0]
+    pat_soundmark = re.compile(r'<span>(.*?)</span>', re.S)
+    soundmark = pat_soundmark.findall(soundmark)
+    if not soundmark:
+        soundmark = ''
+    else:
+        soundmark = soundmark[0]
+
+    # 2 find translate
+    content = result[1]
+    content = content.replace('\n', '').replace('<br/>', '\n').replace(' ', '').replace('\t', '')
+    #for 中文查询
+    content = content.replace('&nbsp;', ' ')
+    content = content.strip()
+
+    print word_input, soundmark
+    print content
+    print
+    print 'More:', pc_url
+
+
+def youdao_login(username, password):
+    #注意是https, http不行
+    url = "https://reg.163.com/logins.jsp"
+    body = {
+        "url": "http://account.youdao.com/login?service=dict&back_url=http%3A%2F%2Fdict.youdao.com&success=1",
+        "product": "search",
+        "type": "1",
+        "username": username,
+        "password": password,
+        "savelogin": "1"
+    }
+    #content-type 不能少
+    headers_form = {
+        "User-Agent": user_agent,
+        "Content-Type": "application/x-www-form-urlencoded"
+    }
+
+    resp, content = h.request(url, method='POST', body=urllib.urlencode(body), headers=headers_form)
+    #print resp
+    cookie = resp['set-cookie']
+    if not cookie:
+        raise
+    return cookie
+
+
+def youdao_wordlist(word, cookie):
+    #添加单词，会自动添加单词信息
+    add_word_url = 'http://dict.youdao.com/wordbook/ajax?action=addword&q=' + word
+
+    headers = {
+        "User-Agent": user_agent,
+        "Cookie": cookie
+    }
+
+    resp, content = h.request(add_word_url, headers=headers)
+
+    if content != '{"message":"adddone"}':
+        raise Exception(content)
+
+
+def write_to_file(file_name, txt):
+    with codecs.open(file_name, "w", "utf-8") as f:
+        f.write(txt)
+
+
+def read_from_file(file_name):
+    with codecs.open(file_name, "r", "utf-8") as f:
+        txt = f.read()
+        txt = txt.encode('utf-8')
+    return txt
+
+
+if __name__ == '__main__':
+    if len(sys.argv) == 1:
+        print 'Usage: yd word [-j]'
+        sys.exit()
+
+    word = sys.argv[1]
+    # 1) 翻译单词
+    # try:
+    #     youdao_traslate(word)
+    # except Exception as e:
+    #     print e
+    #     exit()
+
+    # 2) 是否加入单词本
+    # msg = 'Add to wordlist? y/n '
+    # if raw_input(msg) == 'y':
+    for i in range(3):
+        cookie_txt = '/tmp/.youdao_cookie'
+        if os.path.isfile(cookie_txt):
+            cookie = read_from_file(cookie_txt)
+        else:
+            username = 'username'
+            password = 'password'
+
+            cookie = youdao_login(username, password)
+            write_to_file(cookie_txt, cookie)
+
+        try:
+            youdao_wordlist(word, cookie)
+        except Exception as e:
+            #删除过期的cookie，之后检查文件不存在会写入新的cookie
+            os.system("rm youdao_cookie.txt -f")
+            if str(e) != '{"message":"nouser"}':
+                print 'Fail: %s' % e
+                break
+        else:
+            print 'Success!'
+            break
+    else:
+        print 'Error.'
