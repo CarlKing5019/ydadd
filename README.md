@@ -9,8 +9,8 @@ ydadd 是命令行版本的有道单词本, 支持添加单词到有道单词本
 
 
 ```
-cd ydadd
-make install
+$ cd ydadd
+$ make install
 ```
 
 
