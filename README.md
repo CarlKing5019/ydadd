@@ -5,20 +5,12 @@ ydadd 是命令行版本的有道单词本, 支持添加单词到有道单词本
 
 ## 安装说明
 
-克隆项目或者下载项目文件夹, 把 ydadd 文件中 username，password 改成自己的, 然后使用 `make` 命令或者以下命令安装
+克隆项目或者下载项目文件夹, 把 ydadd 文件中 username，password 改成自己的, 然后使用以下命令安装
 
 
 ```
-chmod a+x ydadd
-cp ydadd /usr/local/bin
+make
 ```
-
-为方便使用可以用 `alias` 给 `ydadd` 起个别名, 如:
-
-```
-alias add='ydadd'
-```
-
 
 
 ## 使用示例
